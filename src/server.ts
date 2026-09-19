@@ -24,6 +24,9 @@ import {
 
 // ── Ingest server ───────────────────────────────────────────────────────────
 
+const DEBUG_COMMAND_TEMPLATE =
+  "The user wants to debug the following issue using runtime evidence. Follow the DEBUG MODE workflow: form hypotheses, instrument, present reproduction steps via `debug_repro_steps`, analyze the logs, and fix only with log proof."
+
 type BunServeOptions = {
   hostname: string
   port: number
@@ -238,6 +241,17 @@ const DebugModePlugin: Plugin = async (ctx) => {
         if (name === DEBUG_AGENT) continue
         const agent = (mutable.agent[name] ??= {})
         denyDebugTools(agent)
+      }
+
+      // Register the /debug command so the package is self-contained.
+      mutable.command ??= {}
+      if (!mutable.command[DEBUG_AGENT]) {
+        mutable.command[DEBUG_AGENT] = {
+          template: `${DEBUG_COMMAND_TEMPLATE}\n\n$ARGUMENTS`,
+          description:
+            "Debug an issue with runtime evidence (hypothesis → instrument → reproduce → analyze → fix → verify)",
+          agent: DEBUG_AGENT,
+        }
       }
 
       mutable.experimental ??= {}
