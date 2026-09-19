@@ -9,8 +9,7 @@
     "url": "git+https://github.com/akaralar/opencode-debug-mode.git"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com",
-    "access": "restricted"
+    "access": "public"
   },
   "main": "dist/server.js",
   "exports": {
