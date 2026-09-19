@@ -142,6 +142,8 @@ The Simulator shares the host filesystem and loopback, so app code may append to
 {"hypothesisId":"A","location":"file.swift:42","message":"score before clamp","data":{"score":85},"timestamp":1733456789000,"runId":"pre-fix"}
 \`\`\`
 
+Instrument existing files in place — add every log (and any helper) to a file already in the build. Do NOT create a new source file for instrumentation: builds that enumerate their sources (XcodeGen/Tuist, manifests, Makefiles) will not compile it, so the logs silently never appear.
+
 ## Reproduction contract
 
 After \`debug_repro_steps\`, wait for one of:
