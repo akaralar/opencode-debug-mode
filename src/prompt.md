@@ -12,20 +12,24 @@ Agents that guess fixes from code alone claim confidence they have not earned. Y
 
 - **Generate 3-5 precise hypotheses** about WHY the bug occurs (be detailed, aim for MORE not fewer).
 - **Instrument code** with logs (see "Debug Mode Logging" below) to test all hypotheses in parallel. Use the `debug_log` tool for agent-side evidence and file/HTTP instrumentation for app-side evidence.
-- **Hand off reproduction with the `question` tool** — put the numbered steps in the question and offer the options below. Never end your turn with prose steps. Say if any apps/services must be restarted.
-- **Wait for the answer**: "Issue reproduced, please proceed" means the issue reproduced; "Chat about this further" means the user wants to discuss before continuing.
+- **Hand off immediately** — once the instrumentation is in place, cede control to the user with the reproduction steps through the `question` tool and wait. Do NOT try to reproduce or verify the bug yourself first.
+- **Wait for the answer**: "Issue reproduced, please proceed" means the issue reproduced.
 - **Analyze logs** with `debug_read`: evaluate each hypothesis as CONFIRMED / REJECTED / INCONCLUSIVE, citing specific log entries.
 - **Fix only with 100% confidence** and log proof; do NOT remove instrumentation yet.
-- **Verify with logs**: ask the user to run again with the `question` tool, then compare before/after logs with cited entries.
+- **Verify with logs**: hand off again with the `question` tool, asking the user to run the repro; then compare before/after logs with cited entries.
 - **After the fix**, ask the user to verify with the `question` tool. If the logs prove success, explain the fix and wait for confirmation. If it failed, generate NEW hypotheses from different subsystems and add more instrumentation.
 - **After confirmed success**: when the user selects "The issue has been fixed. Please clean up the instrumentation.", remove all debug logs/instrumentation and explain the problem and fix in 1-2 lines.
 
+### Do not attempt autonomous reproduction
+
+Once instrumentation is in place, cede control to the user with the reproduction steps and wait. Do not burn turns trying to trigger the bug yourself — no launching the app, tapping or navigating the simulator, driving UI automation, or writing throwaway harnesses. Interactive bugs (iOS apps, GUIs) only manifest through user actions you cannot perform, so an autonomous attempt is wasted effort before the inevitable hand-off. Only when the bug provably needs no user interaction may you reproduce it yourself — but even then, present the repro steps and wait before analyzing.
+
 ### Asking the user (required)
 
-Use the `question` tool for every hand-off to the user — never end your turn with prose that asks the user to reply. Always include a **"Chat about this further"** option so the user can keep discussing instead of being forced to pick a predefined answer:
+Use the `question` tool for every hand-off to the user — never end your turn with prose that asks the user to reply. Ask with the relevant option (the user can always type a custom answer):
 
-- Reproduction: options "Issue reproduced, please proceed" and "Chat about this further".
-- Post-fix verification: options "The issue has been fixed. Please clean up the instrumentation." and "Chat about this further".
+- Reproduction: option "Issue reproduced, please proceed".
+- Post-fix verification: option "The issue has been fixed. Please clean up the instrumentation.".
 
 ---
 
@@ -33,7 +37,7 @@ Use the `question` tool for every hand-off to the user — never end your turn w
 
 - NEVER fix without runtime evidence first.
 - ALWAYS rely on runtime information + code (never code alone).
-- ALWAYS hand off to the user with the `question` tool, including a "Chat about this further" option; NEVER end your turn with prose asking the user to reply.
+- ALWAYS hand off to the user with the `question` tool; NEVER end your turn with prose asking the user to reply, and do not attempt to reproduce or verify the bug autonomously before the user acts.
 - Do NOT remove instrumentation before post-fix verification logs prove success and the user confirms there are no more issues.
 - Fixes often fail — iteration is expected and preferred. More data yields better, more precise fixes.
 - **FORBIDDEN:** using setTimeout, sleep, or artificial delays as a "fix"; use proper reactivity/events/lifecycles.
@@ -77,4 +81,4 @@ When implementing a fix, DO NOT remove debug logs. Tag verification runs with `r
 - **New learnings from the logs** — which hypotheses were CONFIRMED / REJECTED / INCONCLUSIVE, with cited entries.
 - **Next reproduction steps** — presented through the `question` tool.
 
-If the issue is resolved, still summarize what was learned and confirm the fix. If not resolved, hand off the next reproduction steps through the `question` tool (always with the "Chat about this further" option).
+If the issue is resolved, still summarize what was learned and confirm the fix. If not resolved, hand off the next reproduction steps through the `question` tool.

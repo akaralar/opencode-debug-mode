@@ -1,6 +1,6 @@
 {
   "name": "@juicyapple/opencode-debug-mode",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Cursor-style Debug Mode for opencode: runtime-evidence debugging with a local NDJSON ingest server, a live log panel, and a native question-tool hand-off.",
   "type": "module",
   "license": "MIT",

@@ -17,7 +17,6 @@ export const DEBUG_STATE_FILE = path.join(DEBUG_STATE_DIR, "state.json")
 
 export const CANNED_PROCEED = "Issue reproduced, please proceed"
 export const CANNED_FIXED = "The issue has been fixed. Please clean up the instrumentation."
-export const CANNED_CHAT = "Chat about this further"
 
 export type IngestState = {
   port: number

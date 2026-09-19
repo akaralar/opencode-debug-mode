@@ -2,7 +2,6 @@ import { tool, type Plugin } from "@opencode-ai/plugin"
 import { appendFileSync } from "node:fs"
 import { AGENT_PROMPT } from "./prompt"
 import {
-  CANNED_CHAT,
   CANNED_FIXED,
   CANNED_PROCEED,
   DEBUG_AGENT,
@@ -145,16 +144,10 @@ Instrument existing files in place — add every log (and any helper) to a file 
 
 ## Reproduction contract
 
-Hand off to the user with the \`question\` tool — never end your turn with prose steps.
+Hand off to the user with the \`question\` tool — never end your turn with prose steps, and do not attempt autonomous reproduction first.
 
-- Before a run: put the numbered reproduction steps in the question and offer:
-  - "${CANNED_PROCEED}" — the issue reproduced; analyze the logs.
-  - "${CANNED_CHAT}" — the user wants to discuss before continuing.
-- After a fix: ask the user to verify and offer:
-  - "${CANNED_FIXED}" — verified fixed; remove all instrumentation.
-  - "${CANNED_CHAT}" — the user wants to discuss before continuing.
-
-Always include the "${CANNED_CHAT}" option on every question you ask.
+- Before a run: put the numbered reproduction steps in the question and offer "${CANNED_PROCEED}".
+- After a fix: ask the user to verify and offer "${CANNED_FIXED}".
 
 Before each run: \`debug_clear\`. Keep instrumentation during fixes and tag verification entries \`runId: "post-fix"\`. Remove instrumentation only after log-proven success or explicit confirmation.
 </system-reminder>`
