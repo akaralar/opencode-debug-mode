@@ -1,0 +1,42 @@
+{
+  "name": "@akaralar/opencode-debug-mode",
+  "version": "0.1.0",
+  "description": "Cursor-style Debug Mode for opencode: runtime-evidence debugging with a local NDJSON ingest server, a live log panel, and a reproduction handshake.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/akaralar/opencode-debug-mode.git"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  },
+  "main": "dist/server.js",
+  "exports": {
+    ".": "./dist/server.js",
+    "./server": "./dist/server.js",
+    "./tui": "./dist/tui.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "bun run build:server && bun run build:tui",
+    "build:server": "bun build src/server.ts --outfile dist/server.js --target bun --external @opencode-ai/plugin",
+    "build:tui": "bun build src/tui.tsx --outfile dist/tui.js --target bun --external solid-js --external @opencode-ai/plugin/tui --external @opentui/solid/jsx-runtime --external @opentui/solid/jsx-dev-runtime",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "bun run build"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": ">=1.18.0"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "1.18.31",
+    "@opentui/core": ">=0.2.15",
+    "@opentui/solid": ">=0.2.15",
+    "@types/node": "^22.0.0",
+    "solid-js": "^1.9.0",
+    "typescript": "^5.6.0"
+  }
+}
