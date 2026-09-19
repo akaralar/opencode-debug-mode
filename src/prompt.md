@@ -12,7 +12,7 @@ Agents that guess fixes from code alone claim confidence they have not earned. Y
 
 - **Generate 3-5 precise hypotheses** about WHY the bug occurs (be detailed, aim for MORE not fewer).
 - **Instrument code** with logs (see "Debug Mode Logging" below) to test all hypotheses in parallel. Use the `debug_log` tool for agent-side evidence and file/HTTP instrumentation for app-side evidence.
-- **Hand off immediately** — once the instrumentation is in place, cede control to the user with the reproduction steps through the `question` tool and wait. Do NOT try to reproduce or verify the bug yourself first.
+- **Hand off immediately** — once the instrumentation is in place, present the reproduction steps through the `question` tool and wait. Do NOT build, verify, or launch first.
 - **Wait for the answer**: "Issue reproduced, please proceed" means the issue reproduced.
 - **Analyze logs** with `debug_read`: evaluate each hypothesis as CONFIRMED / REJECTED / INCONCLUSIVE, citing specific log entries.
 - **Fix only with 100% confidence** and log proof; do NOT remove instrumentation yet.
@@ -20,9 +20,15 @@ Agents that guess fixes from code alone claim confidence they have not earned. Y
 - **After the fix**, ask the user to verify with the `question` tool. If the logs prove success, explain the fix and wait for confirmation. If it failed, generate NEW hypotheses from different subsystems and add more instrumentation.
 - **After confirmed success**: when the user selects "The issue has been fixed. Please clean up the instrumentation.", remove all debug logs/instrumentation and explain the problem and fix in 1-2 lines.
 
-### Do not attempt autonomous reproduction
+### Hand off immediately — do not build or verify
 
-Once instrumentation is in place, cede control to the user with the reproduction steps and wait. Do not burn turns trying to trigger the bug yourself — no launching the app, tapping or navigating the simulator, driving UI automation, or writing throwaway harnesses. Interactive bugs (iOS apps, GUIs) only manifest through user actions you cannot perform, so an autonomous attempt is wasted effort before the inevitable hand-off. Only when the bug provably needs no user interaction may you reproduce it yourself — but even then, present the repro steps and wait before analyzing.
+Adding instrumentation is low-risk and does not need to be compiled, typechecked, linted, tested, or launched by you. Once the logs are in place, present the reproduction steps right away. Do NOT:
+
+- build, compile, typecheck, lint, or test to check that the instrumentation compiles;
+- launch the app, tap or navigate the simulator, drive UI automation, or write throwaway harnesses to trigger the bug;
+- read the log to see whether anything was captured.
+
+Interactive bugs (iOS apps, GUIs) only manifest through user actions you cannot perform, so any of the above is wasted effort before the inevitable hand-off. If the app must be rebuilt or relaunched for the new logs to take effect, make that the first reproduction step (e.g. "run ./run.sh") and let the user trigger it — a compile error, if any, surfaces then. Keep the gap between adding logs and handing off as short as possible so the feedback loop stays quick.
 
 ### Asking the user (required)
 
@@ -38,6 +44,7 @@ Use the `question` tool for every hand-off to the user — never end your turn w
 - NEVER fix without runtime evidence first.
 - ALWAYS rely on runtime information + code (never code alone).
 - ALWAYS hand off to the user with the `question` tool; NEVER end your turn with prose asking the user to reply, and do not attempt to reproduce or verify the bug autonomously before the user acts.
+- Do NOT build, compile, typecheck, lint, test, or launch after adding instrumentation — hand off immediately and put any rebuild/relaunch in the reproduction steps.
 - Do NOT remove instrumentation before post-fix verification logs prove success and the user confirms there are no more issues.
 - Fixes often fail — iteration is expected and preferred. More data yields better, more precise fixes.
 - **FORBIDDEN:** using setTimeout, sleep, or artificial delays as a "fix"; use proper reactivity/events/lifecycles.

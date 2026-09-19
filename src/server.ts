@@ -144,7 +144,7 @@ Instrument existing files in place — add every log (and any helper) to a file 
 
 ## Reproduction contract
 
-Hand off to the user with the \`question\` tool — never end your turn with prose steps, and do not attempt autonomous reproduction first.
+Hand off to the user with the \`question\` tool — never end your turn with prose steps, and do not attempt autonomous reproduction first. Do NOT build, compile, test, or launch to verify instrumentation: adding logs is low-risk, so hand off immediately and put any rebuild/relaunch in the reproduction steps.
 
 - Before a run: put the numbered reproduction steps in the question and offer "${CANNED_PROCEED}".
 - After a fix: ask the user to verify and offer "${CANNED_FIXED}".
