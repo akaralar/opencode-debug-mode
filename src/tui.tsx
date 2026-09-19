@@ -17,6 +17,7 @@ import {
 
 const POLL_INTERVAL_MS = 500
 const MAX_ENTRIES = 8
+const MAX_STEPS = 8
 
 function currentSessionID(api: TuiPluginApi): string | undefined {
   const current = api.route.current
@@ -67,10 +68,12 @@ async function submitToDebug(api: TuiPluginApi, sessionID: string, text: string)
   }
 }
 
-// ── Log panel state (module scope: the host recreates slot components) ─────
+// ── Module-scope state (the host recreates slot components on each render) ──
 
 const [logEntries, setLogEntries] = createSignal<DebugLogEntry[]>([])
 const [logSessionID, setLogSessionID] = createSignal<string | undefined>()
+const [reproRequest, setReproRequest] = createSignal<ReproRequest | undefined>()
+const [reproSessionID, setReproSessionID] = createSignal<string | undefined>()
 
 let logOffset = 0
 let logPending = ""
@@ -126,6 +129,46 @@ function startLogPolling(api: TuiPluginApi): () => void {
   return () => clearInterval(timer)
 }
 
+function startReproPolling(api: TuiPluginApi): () => void {
+  function refresh(): void {
+    const sessionID = currentSessionID(api)
+    const request = sessionID ? readReproRequest(api.state.path.directory, sessionID) : undefined
+
+    if (!sessionID || !request) {
+      setReproRequest(undefined)
+      setReproSessionID(undefined)
+      return
+    }
+
+    // A direct user reply already answers the request; stop showing the panel.
+    try {
+      const messages = api.state.session.messages(sessionID)
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const message = messages[i]
+        if (message.role !== "user") continue
+        if (message.time.created > request.createdAt) {
+          clearReproRequest(api.state.path.directory, sessionID)
+          setReproRequest(undefined)
+          setReproSessionID(undefined)
+          return
+        }
+        break
+      }
+    } catch {
+      // State not ready yet; show the panel.
+    }
+
+    setReproSessionID(sessionID)
+    setReproRequest(request)
+  }
+
+  const timer = setInterval(refresh, POLL_INTERVAL_MS)
+  refresh()
+  return () => clearInterval(timer)
+}
+
+// ── Components ──────────────────────────────────────────────────────────────
+
 function DebugLogPanel(props: { api: TuiPluginApi }) {
   const theme = () => props.api.theme.current
   return (
@@ -170,93 +213,100 @@ function DebugLogPanel(props: { api: TuiPluginApi }) {
   )
 }
 
-function renderReproDialog(api: TuiPluginApi, sessionID: string, request: ReproRequest) {
-  const directory = api.state.path.directory
-  const settle = (choice: "proceed" | "fixed", text?: string): void => {
-    api.ui.dialog.clear()
-    clearReproRequest(directory, sessionID)
-    const message = choice === "proceed" ? (text ? `${CANNED_PROCEED}. ${text}` : CANNED_PROCEED) : CANNED_FIXED
-    void submitToDebug(api, sessionID, message)
+function ReproductionPanel(props: { api: TuiPluginApi }) {
+  const theme = () => props.api.theme.current
+
+  function dismiss(): void {
+    const sessionID = reproSessionID()
+    if (sessionID) clearReproRequest(props.api.state.path.directory, sessionID)
+    setReproRequest(undefined)
+    setReproSessionID(undefined)
   }
-  return api.ui.DialogSelect<"proceed" | "fixed" | "followup" | string>({
-    title: "Reproduction steps",
-    placeholder: "Choose an action",
-    current: "proceed",
-    options: [
-      ...request.steps.map((step, index) => ({
-        title: `${index + 1}. ${step}`,
-        value: `step-${index}`,
-        disabled: true,
-      })),
-      { title: "Proceed", value: "proceed", description: CANNED_PROCEED },
-      { title: "Mark as fixed", value: "fixed", description: CANNED_FIXED },
-      { title: "Write a follow-up", value: "followup", description: "Describe what happened" },
-    ],
-    onSelect: (option) => {
-      if (option.value === "proceed" || option.value === "fixed") {
-        settle(option.value)
-        return
-      }
-      if (option.value === "followup") {
-        api.ui.dialog.replace(() =>
-          api.ui.DialogPrompt({
-            title: "Debug follow-up",
-            placeholder: "Describe what happened…",
-            onConfirm: (value) => {
-              const text = value.trim()
-              api.ui.dialog.clear()
-              clearReproRequest(directory, sessionID)
-              if (text) void submitToDebug(api, sessionID, text)
-            },
-            onCancel: () => api.ui.dialog.clear(),
-          }),
-        )
-      }
-    },
-  })
+
+  function settle(choice: "proceed" | "fixed", text?: string): void {
+    const sessionID = reproSessionID()
+    if (!sessionID) return
+    dismiss()
+    const message = choice === "proceed" ? (text ? `${CANNED_PROCEED}. ${text}` : CANNED_PROCEED) : CANNED_FIXED
+    void submitToDebug(props.api, sessionID, message)
+  }
+
+  function followUp(): void {
+    const sessionID = reproSessionID()
+    if (!sessionID) return
+    props.api.ui.dialog.replace(() =>
+      props.api.ui.DialogPrompt({
+        title: "Debug follow-up",
+        placeholder: "Describe what happened…",
+        onConfirm: (value) => {
+          props.api.ui.dialog.clear()
+          dismiss()
+          const text = value.trim()
+          if (text) void submitToDebug(props.api, sessionID, text)
+        },
+        onCancel: () => props.api.ui.dialog.clear(),
+      }),
+    )
+  }
+
+  return (
+    <Show when={reproRequest()}>
+      {(request) => (
+        <box flexDirection="column" flexShrink={0}>
+          <box flexDirection="row" gap={2} paddingLeft={1} paddingRight={1}>
+            <text fg={theme().warning}>
+              <b>Reproduction steps</b>
+            </text>
+            <text fg={theme().textMuted}>or type a reply below</text>
+            <box flexGrow={1} />
+            <text fg={theme().textMuted} onMouseDown={dismiss}>
+              dismiss
+            </text>
+          </box>
+          <For each={request().steps.slice(0, MAX_STEPS)}>
+            {(step, index) => (
+              <text fg={theme().text} wrapMode="word" paddingLeft={1}>
+                {`${index() + 1}. ${step}`}
+              </text>
+            )}
+          </For>
+          <box flexDirection="row" gap={3} paddingLeft={1} paddingTop={0}>
+            <box onMouseDown={() => settle("proceed")}>
+              <text fg={theme().error}>
+                <b>Proceed</b>
+              </text>
+            </box>
+            <box onMouseDown={() => settle("fixed")}>
+              <text fg={theme().success}>Mark fixed</text>
+            </box>
+            <box onMouseDown={followUp}>
+              <text fg={theme().textMuted}>Follow-up</text>
+            </box>
+          </box>
+        </box>
+      )}
+    </Show>
+  )
 }
 
 const tui: TuiPlugin = async (api) => {
-  function checkRepro(): void {
-    const sessionID = currentSessionID(api)
-    if (!sessionID) return
-    const request = readReproRequest(api.state.path.directory, sessionID)
-    if (!request) {
-      if (api.ui.dialog.open) api.ui.dialog.clear()
-      return
-    }
-    // A direct user reply already answers the request; don't keep prompting.
-    try {
-      const messages = api.state.session.messages(sessionID)
-      for (let i = messages.length - 1; i >= 0; i--) {
-        const message = messages[i]
-        if (message.role !== "user") continue
-        if (message.time.created > request.createdAt) {
-          clearReproRequest(api.state.path.directory, sessionID)
-          if (api.ui.dialog.open) api.ui.dialog.clear()
-          return
-        }
-        break
-      }
-    } catch {
-      // State not ready; fall through to showing the dialog.
-    }
-    if (api.ui.dialog.open) return
-    api.ui.dialog.replace(() => renderReproDialog(api, sessionID, request))
-  }
-
-  const reproTimer = setInterval(checkRepro, POLL_INTERVAL_MS)
   const stopLogPolling = startLogPolling(api)
+  const stopReproPolling = startReproPolling(api)
   api.lifecycle.onDispose(() => {
-    clearInterval(reproTimer)
     stopLogPolling()
+    stopReproPolling()
   })
 
   api.slots.register({
     order: 40,
     slots: {
       app_bottom() {
-        return <DebugLogPanel api={api} />
+        return (
+          <box flexDirection="column" flexShrink={0}>
+            <ReproductionPanel api={api} />
+            <DebugLogPanel api={api} />
+          </box>
+        )
       },
     },
   })
@@ -273,6 +323,7 @@ const tui: TuiPlugin = async (api) => {
           const sessionID = currentSessionID(api)
           if (!sessionID) return
           clearReproRequest(api.state.path.directory, sessionID)
+          setReproRequest(undefined)
           void submitToDebug(api, sessionID, CANNED_PROCEED)
         },
       },
@@ -286,6 +337,7 @@ const tui: TuiPlugin = async (api) => {
           const sessionID = currentSessionID(api)
           if (!sessionID) return
           clearReproRequest(api.state.path.directory, sessionID)
+          setReproRequest(undefined)
           void submitToDebug(api, sessionID, CANNED_FIXED)
         },
       },
@@ -305,6 +357,7 @@ const tui: TuiPlugin = async (api) => {
               onConfirm: (value) => {
                 api.ui.dialog.clear()
                 clearReproRequest(api.state.path.directory, sessionID)
+                setReproRequest(undefined)
                 const text = value.trim()
                 if (text) void submitToDebug(api, sessionID, text)
               },
