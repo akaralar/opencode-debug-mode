@@ -2,17 +2,12 @@ import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { closeSync, openSync, readSync, statSync } from "node:fs"
 import { createSignal, For, Show } from "solid-js"
 import {
-  CANNED_FIXED,
-  CANNED_PROCEED,
   DEBUG_AGENT,
   clearDebugLog,
-  clearReproRequest,
   debugLogPath,
   formatLogEntry,
   parseNdjson,
-  readReproRequest,
   type DebugLogEntry,
-  type ReproRequest,
 } from "./shared"
 
 const POLL_INTERVAL_MS = 500
@@ -44,27 +39,6 @@ function isDebugSession(api: TuiPluginApi, sessionID: string | undefined): boole
     return false
   }
   return false
-}
-
-async function submitToDebug(api: TuiPluginApi, sessionID: string, text: string): Promise<void> {
-  try {
-    await api.client.session.abort({ sessionID })
-  } catch {
-    // Nothing in flight is fine.
-  }
-  try {
-    await api.client.session.prompt({
-      sessionID,
-      agent: DEBUG_AGENT,
-      parts: [{ type: "text", text }],
-    })
-  } catch (error) {
-    api.ui.toast({
-      variant: "error",
-      title: "Debug Mode",
-      message: `Could not send message: ${error instanceof Error ? error.message : String(error)}`,
-    })
-  }
 }
 
 // ── Log panel state (module scope: the host recreates slot components) ─────
@@ -170,85 +144,9 @@ function DebugLogPanel(props: { api: TuiPluginApi }) {
   )
 }
 
-function renderReproDialog(api: TuiPluginApi, sessionID: string, request: ReproRequest) {
-  const directory = api.state.path.directory
-  const settle = (choice: "proceed" | "fixed", text?: string): void => {
-    api.ui.dialog.clear()
-    clearReproRequest(directory, sessionID)
-    const message = choice === "proceed" ? (text ? `${CANNED_PROCEED}. ${text}` : CANNED_PROCEED) : CANNED_FIXED
-    void submitToDebug(api, sessionID, message)
-  }
-  return api.ui.DialogSelect<"proceed" | "fixed" | "followup" | string>({
-    title: "Reproduction steps",
-    placeholder: "Choose an action",
-    current: "proceed",
-    options: [
-      ...request.steps.map((step, index) => ({
-        title: `${index + 1}. ${step}`,
-        value: `step-${index}`,
-        disabled: true,
-      })),
-      { title: "Proceed", value: "proceed", description: CANNED_PROCEED },
-      { title: "Mark as fixed", value: "fixed", description: CANNED_FIXED },
-      { title: "Write a follow-up", value: "followup", description: "Describe what happened" },
-    ],
-    onSelect: (option) => {
-      if (option.value === "proceed" || option.value === "fixed") {
-        settle(option.value)
-        return
-      }
-      if (option.value === "followup") {
-        api.ui.dialog.replace(() =>
-          api.ui.DialogPrompt({
-            title: "Debug follow-up",
-            placeholder: "Describe what happened…",
-            onConfirm: (value) => {
-              const text = value.trim()
-              api.ui.dialog.clear()
-              clearReproRequest(directory, sessionID)
-              if (text) void submitToDebug(api, sessionID, text)
-            },
-            onCancel: () => api.ui.dialog.clear(),
-          }),
-        )
-      }
-    },
-  })
-}
-
 const tui: TuiPlugin = async (api) => {
-  function checkRepro(): void {
-    const sessionID = currentSessionID(api)
-    if (!sessionID) return
-    const request = readReproRequest(api.state.path.directory, sessionID)
-    if (!request) {
-      if (api.ui.dialog.open) api.ui.dialog.clear()
-      return
-    }
-    // A direct user reply already answers the request; don't keep prompting.
-    try {
-      const messages = api.state.session.messages(sessionID)
-      for (let i = messages.length - 1; i >= 0; i--) {
-        const message = messages[i]
-        if (message.role !== "user") continue
-        if (message.time.created > request.createdAt) {
-          clearReproRequest(api.state.path.directory, sessionID)
-          if (api.ui.dialog.open) api.ui.dialog.clear()
-          return
-        }
-        break
-      }
-    } catch {
-      // State not ready; fall through to showing the dialog.
-    }
-    if (api.ui.dialog.open) return
-    api.ui.dialog.replace(() => renderReproDialog(api, sessionID, request))
-  }
-
-  const reproTimer = setInterval(checkRepro, POLL_INTERVAL_MS)
   const stopLogPolling = startLogPolling(api)
   api.lifecycle.onDispose(() => {
-    clearInterval(reproTimer)
     stopLogPolling()
   })
 
@@ -263,56 +161,6 @@ const tui: TuiPlugin = async (api) => {
 
   api.keymap.registerLayer({
     commands: [
-      {
-        name: "debug.proceed",
-        title: "Debug: issue reproduced",
-        category: "Debug",
-        namespace: "palette",
-        slashName: "debug-proceed",
-        run: () => {
-          const sessionID = currentSessionID(api)
-          if (!sessionID) return
-          clearReproRequest(api.state.path.directory, sessionID)
-          void submitToDebug(api, sessionID, CANNED_PROCEED)
-        },
-      },
-      {
-        name: "debug.markFixed",
-        title: "Debug: mark fixed and clean up",
-        category: "Debug",
-        namespace: "palette",
-        slashName: "debug-fixed",
-        run: () => {
-          const sessionID = currentSessionID(api)
-          if (!sessionID) return
-          clearReproRequest(api.state.path.directory, sessionID)
-          void submitToDebug(api, sessionID, CANNED_FIXED)
-        },
-      },
-      {
-        name: "debug.followUp",
-        title: "Debug: write a follow-up",
-        category: "Debug",
-        namespace: "palette",
-        slashName: "debug-follow-up",
-        run: () => {
-          const sessionID = currentSessionID(api)
-          if (!sessionID) return
-          api.ui.dialog.replace(() =>
-            api.ui.DialogPrompt({
-              title: "Debug follow-up",
-              placeholder: "Describe what happened…",
-              onConfirm: (value) => {
-                api.ui.dialog.clear()
-                clearReproRequest(api.state.path.directory, sessionID)
-                const text = value.trim()
-                if (text) void submitToDebug(api, sessionID, text)
-              },
-              onCancel: () => api.ui.dialog.clear(),
-            }),
-          )
-        },
-      },
       {
         name: "debug.clearLog",
         title: "Debug: clear session log",

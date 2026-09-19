@@ -2,6 +2,7 @@ import { tool, type Plugin } from "@opencode-ai/plugin"
 import { appendFileSync } from "node:fs"
 import { AGENT_PROMPT } from "./prompt"
 import {
+  CANNED_CHAT,
   CANNED_FIXED,
   CANNED_PROCEED,
   DEBUG_AGENT,
@@ -17,7 +18,6 @@ import {
   readIngestState,
   shortSessionID,
   writeIngestState,
-  writeReproRequest,
   type DebugSession,
   type IngestState,
 } from "./shared"
@@ -25,7 +25,7 @@ import {
 // ── Ingest server ───────────────────────────────────────────────────────────
 
 const DEBUG_COMMAND_TEMPLATE =
-  "The user wants to debug the following issue using runtime evidence. Follow the DEBUG MODE workflow: form hypotheses, instrument, present reproduction steps via `debug_repro_steps`, analyze the logs, and fix only with log proof."
+  "The user wants to debug the following issue using runtime evidence. Follow the DEBUG MODE workflow: form hypotheses, instrument, present reproduction steps with the `question` tool, analyze the logs, and fix only with log proof."
 
 type BunServeOptions = {
   hostname: string
@@ -134,7 +134,6 @@ The Simulator shares the host filesystem and loopback, so app code may append to
 - \`debug_log\` — append one NDJSON entry (agent-side evidence).
 - \`debug_clear\` — truncate the session log before a run (does NOT remove instrumentation from code).
 - \`debug_read\` — read parsed entries for hypothesis analysis.
-- \`debug_repro_steps\` — present numbered reproduction steps to the user and wait.
 
 ## NDJSON entry shape
 
@@ -146,9 +145,16 @@ Instrument existing files in place — add every log (and any helper) to a file 
 
 ## Reproduction contract
 
-After \`debug_repro_steps\`, wait for one of:
-- "${CANNED_PROCEED}" — the issue reproduced; analyze the logs.
-- "${CANNED_FIXED}" — verified fixed; remove all instrumentation.
+Hand off to the user with the \`question\` tool — never end your turn with prose steps.
+
+- Before a run: put the numbered reproduction steps in the question and offer:
+  - "${CANNED_PROCEED}" — the issue reproduced; analyze the logs.
+  - "${CANNED_CHAT}" — the user wants to discuss before continuing.
+- After a fix: ask the user to verify and offer:
+  - "${CANNED_FIXED}" — verified fixed; remove all instrumentation.
+  - "${CANNED_CHAT}" — the user wants to discuss before continuing.
+
+Always include the "${CANNED_CHAT}" option on every question you ask.
 
 Before each run: \`debug_clear\`. Keep instrumentation during fixes and tag verification entries \`runId: "post-fix"\`. Remove instrumentation only after log-proven success or explicit confirmation.
 </system-reminder>`
@@ -231,7 +237,7 @@ const DebugModePlugin: Plugin = async (ctx) => {
           debug_log: "allow",
           debug_clear: "allow",
           debug_read: "allow",
-          debug_repro_steps: "allow",
+          question: "allow",
         },
       }
 
@@ -320,20 +326,6 @@ const DebugModePlugin: Plugin = async (ctx) => {
           }
           const lines = selected.map((entry) => formatLogEntry(entry))
           return `${selected.length} entr${selected.length === 1 ? "y" : "ies"} from ${logPath}:\n${lines.join("\n")}`
-        },
-      }),
-
-      debug_repro_steps: tool({
-        description:
-          "Present numbered reproduction steps and wait for the user's decision. With a TUI attached this opens Proceed / Mark fixed / Follow-up and returns the user's choice. Call this instead of ending your turn with prose steps.",
-        args: {
-          steps: tool.schema.array(tool.schema.string()).describe("Ordered reproduction steps"),
-        },
-        async execute(args, context) {
-          const steps = args.steps.length ? args.steps : ["(no steps provided)"]
-          const numbered = steps.map((step, index) => `${index + 1}. ${step}`).join("\n")
-          writeReproRequest(context.directory, context.sessionID, steps)
-          return `Reproduction steps presented to the user:\n${numbered}\n\nThe user will confirm using the Proceed / Mark fixed / Write a follow-up actions, or reply directly. Wait for one of:\n- "${CANNED_PROCEED}"\n- "${CANNED_FIXED}"\n\nDo not proceed until you receive one of those replies.`
         },
       }),
     },

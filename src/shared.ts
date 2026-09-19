@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, truncateSync, unlinkSync, writeFileSync } from "node:fs"
+import { appendFileSync, existsSync, mkdirSync, readFileSync, truncateSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 
@@ -8,7 +8,6 @@ export const DEBUG_TOOL_NAMES = [
   "debug_log",
   "debug_clear",
   "debug_read",
-  "debug_repro_steps",
 ] as const
 
 export const DEBUG_LOG_DIRNAME = path.join(".opencode", "debug-log")
@@ -18,6 +17,7 @@ export const DEBUG_STATE_FILE = path.join(DEBUG_STATE_DIR, "state.json")
 
 export const CANNED_PROCEED = "Issue reproduced, please proceed"
 export const CANNED_FIXED = "The issue has been fixed. Please clean up the instrumentation."
+export const CANNED_CHAT = "Chat about this further"
 
 export type IngestState = {
   port: number
@@ -41,59 +41,6 @@ export type DebugLogEntry = {
   runId?: string
   data?: unknown
   raw?: string
-}
-
-// ── Reproduction request handshake (filesystem, process-safe) ──────────────
-
-export type ReproChoice = "proceed" | "fixed" | "followup" | "dismissed"
-
-export type ReproRequest = {
-  id: string
-  sessionID: string
-  steps: string[]
-  createdAt: number
-}
-
-export function reproRequestPath(directory: string, sessionID: string): string {
-  return path.join(debugLogDir(directory), `repro-${shortSessionID(sessionID)}.json`)
-}
-
-export function writeReproRequest(directory: string, sessionID: string, steps: string[]): ReproRequest {
-  const request: ReproRequest = {
-    id: crypto.randomUUID(),
-    sessionID,
-    steps,
-    createdAt: Date.now(),
-  }
-  const file = reproRequestPath(directory, sessionID)
-  ensureParent(file)
-  writeFileSync(file, JSON.stringify(request), "utf8")
-  return request
-}
-
-export function readReproRequest(directory: string, sessionID: string): ReproRequest | undefined {
-  try {
-    const parsed = JSON.parse(readFileSync(reproRequestPath(directory, sessionID), "utf8")) as Partial<ReproRequest>
-    if (typeof parsed.id === "string" && Array.isArray(parsed.steps)) {
-      return {
-        id: parsed.id,
-        sessionID: typeof parsed.sessionID === "string" ? parsed.sessionID : sessionID,
-        steps: parsed.steps.map((step) => String(step)),
-        createdAt: typeof parsed.createdAt === "number" ? parsed.createdAt : 0,
-      }
-    }
-  } catch {
-    // No pending request is the common case.
-  }
-  return undefined
-}
-
-export function clearReproRequest(directory: string, sessionID: string): void {
-  try {
-    unlinkSync(reproRequestPath(directory, sessionID))
-  } catch {
-    // Already gone.
-  }
 }
 
 // ── Paths & log IO ─────────────────────────────────────────────────────────
