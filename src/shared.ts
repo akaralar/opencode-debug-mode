@@ -47,7 +47,7 @@ export type DebugLogEntry = {
 
 export function shortSessionID(sessionID: string): string {
   const cleaned = sessionID.replace(/[^a-zA-Z0-9]/g, "").toLowerCase()
-  return cleaned.slice(0, 6) || "000000"
+  return cleaned.slice(-6) || "000000"
 }
 
 export function debugLogDir(directory: string): string {
