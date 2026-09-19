@@ -16,8 +16,8 @@ import {
 } from "./shared"
 
 const POLL_INTERVAL_MS = 500
-const MAX_ENTRIES = 8
-const MAX_STEPS = 8
+const MAX_ENTRIES = 5
+const MAX_STEPS = 3
 
 function currentSessionID(api: TuiPluginApi): string | undefined {
   const current = api.route.current
@@ -255,9 +255,19 @@ function ReproductionPanel(props: { api: TuiPluginApi }) {
         <box flexDirection="column" flexShrink={0}>
           <box flexDirection="row" gap={2} paddingLeft={1} paddingRight={1}>
             <text fg={theme().warning}>
-              <b>Reproduction steps</b>
+              <b>Repro</b>
             </text>
-            <text fg={theme().textMuted}>or type a reply below</text>
+            <box onMouseDown={() => settle("proceed")}>
+              <text fg={theme().error}>
+                <b>Proceed</b>
+              </text>
+            </box>
+            <box onMouseDown={() => settle("fixed")}>
+              <text fg={theme().success}>Mark fixed</text>
+            </box>
+            <box onMouseDown={followUp}>
+              <text fg={theme().textMuted}>Follow-up</text>
+            </box>
             <box flexGrow={1} />
             <text fg={theme().textMuted} onMouseDown={dismiss}>
               dismiss
@@ -270,19 +280,11 @@ function ReproductionPanel(props: { api: TuiPluginApi }) {
               </text>
             )}
           </For>
-          <box flexDirection="row" gap={3} paddingLeft={1} paddingTop={0}>
-            <box onMouseDown={() => settle("proceed")}>
-              <text fg={theme().error}>
-                <b>Proceed</b>
-              </text>
-            </box>
-            <box onMouseDown={() => settle("fixed")}>
-              <text fg={theme().success}>Mark fixed</text>
-            </box>
-            <box onMouseDown={followUp}>
-              <text fg={theme().textMuted}>Follow-up</text>
-            </box>
-          </box>
+          <Show when={request().steps.length > MAX_STEPS}>
+            <text fg={theme().textMuted} paddingLeft={1}>
+              {`+${request().steps.length - MAX_STEPS} more step(s) — see the tool output above`}
+            </text>
+          </Show>
         </box>
       )}
     </Show>
